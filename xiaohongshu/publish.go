@@ -35,6 +35,110 @@ const (
 	urlOfPublic = `https://creator.xiaohongshu.com/publish/publish?source=official`
 )
 
+// selectors 集中管理所有页面选择器，小红书改版时只需更新此处
+// 最后验证: 2026-03
+var selectors = struct {
+	// 页面加载
+	UploadContentArea string // 上传区域容器
+	PublishTab        string // 发布类型 TAB
+	PopoverCover      string // 弹窗遮罩
+
+	// 文件上传
+	UploadInput         string // 上传输入框
+	UploadInputFallback string // 上传输入框（兜底）
+	ImagePreview        string // 图片预览区
+
+	// 表单
+	TitleInput         string // 标题输入框
+	ContentEditorQuill string // 正文编辑器（Quill 版）
+	ContentPlaceholder string // 正文 placeholder 文本（非 CSS 选择器）
+
+	// 校验
+	TitleMaxLength   string // 标题超长提示
+	ContentMaxLength string // 正文超长提示
+
+	// 发布
+	PublishButton string // 发布按钮
+
+	// 标签
+	TopicContainer string // 标签联想容器
+	TopicItem      string // 标签联想选项
+
+	// 可见范围
+	VisibilityDropdown string // 可见范围下拉框
+	VisibilityOptions  string // 可见范围选项列表
+
+	// 定时发布
+	ScheduleSwitch    string // 定时发布开关
+	ScheduleDateInput string // 日期时间输入框
+
+	// 原创声明
+	OriginalSwitchCards string // 原创声明卡片容器
+	OriginalSwitch      string // 原创声明开关
+
+	// 商品绑定 - 入口
+	AddProductSpans string // "添加商品"文本容器
+	ProductModal    string // 商品选择弹窗
+
+	// 商品绑定 - 弹窗内
+	GoodsSearchInput  string // 商品搜索框
+	GoodsLoading      string // 商品列表加载中
+	GoodsListItem     string // 商品列表容器（等待渲染）
+	GoodsCheckbox     string // 商品选择框
+	GoodsSaveButton   string // 保存按钮
+	GoodsSaveFallback string // 保存按钮（兜底）
+}{
+	// 页面加载
+	UploadContentArea: "div.upload-content",
+	PublishTab:        "div.creator-tab",
+	PopoverCover:      "div.d-popover",
+
+	// 文件上传
+	UploadInput:         ".upload-input",
+	UploadInputFallback: `input[type="file"]`,
+	ImagePreview:        ".img-preview-area .pr",
+
+	// 表单
+	TitleInput:         "div.d-input input",
+	ContentEditorQuill: "div.ql-editor",
+	ContentPlaceholder: "输入正文描述",
+
+	// 校验
+	TitleMaxLength:   "div.title-container div.max_suffix",
+	ContentMaxLength: "div.edit-container div.length-error",
+
+	// 发布
+	PublishButton: ".publish-page-publish-btn button.bg-red",
+
+	// 标签
+	TopicContainer: "#creator-editor-topic-container",
+	TopicItem:      ".item",
+
+	// 可见范围
+	VisibilityDropdown: "div.permission-card-wrapper div.d-select-content",
+	VisibilityOptions:  "div.d-options-wrapper div.d-grid-item div.custom-option",
+
+	// 定时发布
+	ScheduleSwitch:    ".post-time-wrapper .d-switch",
+	ScheduleDateInput: ".date-picker-container input",
+
+	// 原创声明
+	OriginalSwitchCards: "div.custom-switch-card",
+	OriginalSwitch:      "div.d-switch",
+
+	// 商品绑定 - 入口
+	AddProductSpans: "span.d-text",
+	ProductModal:    ".multi-goods-selector-modal",
+
+	// 商品绑定 - 弹窗内
+	GoodsSearchInput:  `input[placeholder="搜索商品ID 或 商品名称"]`,
+	GoodsLoading:      ".goods-list-loading",
+	GoodsListItem:     ".goods-list-normal .good-card-container",
+	GoodsCheckbox:     ".goods-list-normal .good-card-container .d-checkbox",
+	GoodsSaveButton:   ".goods-selected-footer button",
+	GoodsSaveFallback: ".goods-selected-footer .d-button--primary",
+}
+
 func NewPublishImageAction(page *rod.Page) (*PublishAction, error) {
 
 	pp := page.Timeout(300 * time.Second)
@@ -116,7 +220,18 @@ func clickEmptyPosition(page *rod.Page) {
 }
 
 func mustClickPublishTab(page *rod.Page, tabname string) error {
-	page.MustElement(`div.upload-content`).MustWaitVisible()
+	// 等待上传区域出现，使用安全的 Has 检查，避免 MustElement 在元素不存在时 panic
+	{
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			if has, elem, err := page.Has(`div.upload-content`); err == nil && has {
+				if visible, _ := elem.Visible(); visible {
+					break
+				}
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
 
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
@@ -215,14 +330,13 @@ func uploadImages(page *rod.Page, imagesPaths []string) error {
 
 	// 逐张上传：每张上传后等待预览出现，再上传下一张
 	for i, path := range validPaths {
-		selector := `input[type="file"]`
-		if i == 0 {
-			selector = ".upload-input"
-		}
-
-		uploadInput, err := page.Element(selector)
-		if err != nil {
-			return errors.Wrapf(err, "查找上传输入框失败(第%d张)", i+1)
+		// 优先使用 .upload-input，找不到则回退到通用选择器（XHS 页面更新后类名可能变化）
+		uploadInput, err := page.Element(".upload-input")
+		if err != nil || uploadInput == nil {
+			uploadInput, err = page.Element(`input[type="file"]`)
+			if err != nil {
+				return errors.Wrapf(err, "查找上传输入框失败(第%d张)", i+1)
+			}
 		}
 		if err := uploadInput.SetFiles([]string{path}); err != nil {
 			return errors.Wrapf(err, "上传第%d张图片失败", i+1)
