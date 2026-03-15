@@ -81,9 +81,9 @@ func uploadVideo(page *rod.Page, videoPath string) error {
 	// 寻找文件上传输入框（与图文一致的 class，或退回到 input[type=file]）
 	var fileInput *rod.Element
 	var err error
-	fileInput, err = pp.Element(".upload-input")
+	fileInput, err = pp.Element(selectors.UploadInput)
 	if err != nil || fileInput == nil {
-		fileInput, err = pp.Element("input[type='file']")
+		fileInput, err = pp.Element(selectors.UploadInputFallback)
 		if err != nil || fileInput == nil {
 			return errors.New("未找到视频上传输入框")
 		}
@@ -105,7 +105,7 @@ func waitForPublishButtonClickable(page *rod.Page) (*rod.Element, error) {
 	maxWait := 10 * time.Minute
 	interval := 1 * time.Second
 	start := time.Now()
-	selector := ".publish-page-publish-btn button.bg-red"
+	selector := selectors.PublishButton
 
 	slog.Info("开始等待发布按钮可点击(视频)")
 
@@ -134,7 +134,7 @@ func waitForPublishButtonClickable(page *rod.Page) (*rod.Element, error) {
 // submitPublishVideo 填写标题、正文、标签并点击发布（等待按钮可点击后再提交）
 func submitPublishVideo(page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, visibility string, products []string) error {
 	// 标题
-	titleElem, err := page.Element("div.d-input input")
+	titleElem, err := page.Element(selectors.TitleInput)
 	if err != nil {
 		return errors.Wrap(err, "查找标题输入框失败")
 	}
