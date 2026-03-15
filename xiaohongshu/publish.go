@@ -201,7 +201,7 @@ func (p *PublishAction) Publish(ctx context.Context, content PublishImageContent
 func removePopCover(page *rod.Page) {
 
 	// 先移除弹窗封面
-	has, elem, err := page.Has("div.d-popover")
+	has, elem, err := page.Has(selectors.PopoverCover)
 	if err != nil {
 		return
 	}
@@ -224,7 +224,7 @@ func mustClickPublishTab(page *rod.Page, tabname string) error {
 	{
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {
-			if has, elem, err := page.Has(`div.upload-content`); err == nil && has {
+			if has, elem, err := page.Has(selectors.UploadContentArea); err == nil && has {
 				if visible, _ := elem.Visible(); visible {
 					break
 				}
@@ -267,7 +267,7 @@ func mustClickPublishTab(page *rod.Page, tabname string) error {
 }
 
 func getTabElement(page *rod.Page, tabname string) (*rod.Element, bool, error) {
-	elems, err := page.Elements("div.creator-tab")
+	elems, err := page.Elements(selectors.PublishTab)
 	if err != nil {
 		return nil, false, err
 	}
@@ -331,9 +331,9 @@ func uploadImages(page *rod.Page, imagesPaths []string) error {
 	// 逐张上传：每张上传后等待预览出现，再上传下一张
 	for i, path := range validPaths {
 		// 优先使用 .upload-input，找不到则回退到通用选择器（XHS 页面更新后类名可能变化）
-		uploadInput, err := page.Element(".upload-input")
+		uploadInput, err := page.Element(selectors.UploadInput)
 		if err != nil || uploadInput == nil {
-			uploadInput, err = page.Element(`input[type="file"]`)
+			uploadInput, err = page.Element(selectors.UploadInputFallback)
 			if err != nil {
 				return errors.Wrapf(err, "查找上传输入框失败(第%d张)", i+1)
 			}
@@ -362,7 +362,7 @@ func waitForUploadComplete(page *rod.Page, expectedCount int) error {
 	lastLogCount := expectedCount - 1
 
 	for time.Since(start) < maxWaitTime {
-		uploadedImages, err := page.Elements(".img-preview-area .pr")
+		uploadedImages, err := page.Elements(selectors.ImagePreview)
 		if err != nil {
 			time.Sleep(checkInterval)
 			continue
@@ -386,7 +386,7 @@ func waitForUploadComplete(page *rod.Page, expectedCount int) error {
 }
 
 func submitPublish(page *rod.Page, title, content string, tags []string, scheduleTime *time.Time, isOriginal bool, visibility string, products []string) error {
-	titleElem, err := page.Element("div.d-input input")
+	titleElem, err := page.Element(selectors.TitleInput)
 	if err != nil {
 		return errors.Wrap(err, "查找标题输入框失败")
 	}
@@ -452,7 +452,7 @@ func submitPublish(page *rod.Page, title, content string, tags []string, schedul
 		return errors.Wrap(err, "绑定商品失败")
 	}
 
-	submitButton, err := page.Element(".publish-page-publish-btn button.bg-red")
+	submitButton, err := page.Element(selectors.PublishButton)
 	if err != nil {
 		return errors.Wrap(err, "查找发布按钮失败")
 	}
@@ -477,7 +477,7 @@ func waitAndClickTitleInput(titleElem *rod.Element) error {
 
 // 检查标题是否超过最大长度
 func checkTitleMaxLength(page *rod.Page) error {
-	has, elem, err := page.Has(`div.title-container div.max_suffix`)
+	has, elem, err := page.Has(selectors.TitleMaxLength)
 	if err != nil {
 		return errors.Wrap(err, "检查标题长度元素失败")
 	}
@@ -497,7 +497,7 @@ func checkTitleMaxLength(page *rod.Page) error {
 }
 
 func checkContentMaxLength(page *rod.Page) error {
-	has, elem, err := page.Has(`div.edit-container div.length-error`)
+	has, elem, err := page.Has(selectors.ContentMaxLength)
 	if err != nil {
 		return errors.Wrap(err, "检查正文长度元素失败")
 	}
@@ -533,7 +533,7 @@ func getContentElement(page *rod.Page) (*rod.Element, bool) {
 	var found bool
 
 	page.Race().
-		Element("div.ql-editor").MustHandle(func(e *rod.Element) {
+		Element(selectors.ContentEditorQuill).MustHandle(func(e *rod.Element) {
 		foundElement = e
 		found = true
 	}).
@@ -606,13 +606,13 @@ func inputTag(contentElem *rod.Element, tag string) error {
 	time.Sleep(1 * time.Second)
 
 	page := contentElem.Page()
-	topicContainer, err := page.Element("#creator-editor-topic-container")
+	topicContainer, err := page.Element(selectors.TopicContainer)
 	if err != nil || topicContainer == nil {
 		slog.Warn("未找到标签联想下拉框，直接输入空格", "tag", tag)
 		return contentElem.Input(" ")
 	}
 
-	firstItem, err := topicContainer.Element(".item")
+	firstItem, err := topicContainer.Element(selectors.TopicItem)
 	if err != nil || firstItem == nil {
 		slog.Warn("未找到标签联想选项，直接输入空格", "tag", tag)
 		return contentElem.Input(" ")
@@ -635,7 +635,7 @@ func findTextboxByPlaceholder(page *rod.Page) (*rod.Element, error) {
 	}
 
 	// 查找包含指定placeholder的元素
-	placeholderElem := findPlaceholderElement(elements, "输入正文描述")
+	placeholderElem := findPlaceholderElement(elements, selectors.ContentPlaceholder)
 	if placeholderElem == nil {
 		return nil, errors.New("no placeholder element found")
 	}
@@ -727,7 +727,7 @@ func setVisibility(page *rod.Page, visibility string) error {
 	}
 
 	// 点击可见范围下拉框
-	dropdown, err := page.Element("div.permission-card-wrapper div.d-select-content")
+	dropdown, err := page.Element(selectors.VisibilityDropdown)
 	if err != nil {
 		return errors.Wrap(err, "查找可见范围下拉框失败")
 	}
@@ -737,7 +737,7 @@ func setVisibility(page *rod.Page, visibility string) error {
 	time.Sleep(500 * time.Millisecond)
 
 	// 在弹窗中查找并点击目标选项
-	opts, err := page.Elements("div.d-options-wrapper div.d-grid-item div.custom-option")
+	opts, err := page.Elements(selectors.VisibilityOptions)
 	if err != nil {
 		return errors.Wrap(err, "查找可见范围选项失败")
 	}
@@ -777,7 +777,7 @@ func setSchedulePublish(page *rod.Page, t time.Time) error {
 
 // clickScheduleSwitch 点击定时发布开关
 func clickScheduleSwitch(page *rod.Page) error {
-	switchElem, err := page.Element(".post-time-wrapper .d-switch")
+	switchElem, err := page.Element(selectors.ScheduleSwitch)
 	if err != nil {
 		return errors.Wrap(err, "查找定时发布开关失败")
 	}
@@ -793,7 +793,7 @@ func clickScheduleSwitch(page *rod.Page) error {
 func setDateTime(page *rod.Page, t time.Time) error {
 	dateTimeStr := t.Format("2006-01-02 15:04")
 
-	input, err := page.Element(".date-picker-container input")
+	input, err := page.Element(selectors.ScheduleDateInput)
 	if err != nil {
 		return errors.Wrap(err, "查找日期时间输入框失败")
 	}
@@ -816,7 +816,7 @@ func setOriginal(page *rod.Page) error {
 	// 开关是 div.d-switch 组件
 
 	// 查找包含"原创声明"文本的 custom-switch-card
-	switchCards, err := page.Elements("div.custom-switch-card")
+	switchCards, err := page.Elements(selectors.OriginalSwitchCards)
 	if err != nil {
 		return errors.Wrap(err, "查找原创声明卡片失败")
 	}
@@ -833,7 +833,7 @@ func setOriginal(page *rod.Page) error {
 		}
 
 		// 找到原创声明卡片，查找其中的 d-switch
-		switchElem, err := card.Element("div.d-switch")
+		switchElem, err := card.Element(selectors.OriginalSwitch)
 		if err != nil {
 			continue
 		}
@@ -1015,7 +1015,7 @@ func clickAddProductButton(page *rod.Page) error {
 	slog.Info("开始查找添加商品按钮")
 
 	// 查找包含"添加商品"文本的元素
-	spans, err := page.Elements("span.d-text")
+	spans, err := page.Elements(selectors.AddProductSpans)
 	if err != nil {
 		return errors.Wrap(err, "查找商品按钮文本失败")
 	}
@@ -1073,7 +1073,7 @@ func waitForProductModal(page *rod.Page) (*rod.Element, error) {
 	deadline := time.Now().Add(10 * time.Second)
 
 	for time.Now().Before(deadline) {
-		modal, err := page.Element(".multi-goods-selector-modal")
+		modal, err := page.Element(selectors.ProductModal)
 		if err == nil && modal != nil {
 			visible, _ := modal.Visible()
 			if visible {
@@ -1092,7 +1092,7 @@ func searchAndSelectProduct(page *rod.Page, modal *rod.Element, keyword string) 
 	slog.Info("搜索商品", "keyword", keyword)
 
 	// 1. 获取搜索框
-	searchInput, err := modal.Element(`input[placeholder="搜索商品ID 或 商品名称"]`)
+	searchInput, err := modal.Element(selectors.GoodsSearchInput)
 	if err != nil {
 		return errors.Wrap(err, "未找到商品搜索框")
 	}
@@ -1120,7 +1120,7 @@ func searchAndSelectProduct(page *rod.Page, modal *rod.Element, keyword string) 
 	// 等待 loading 消失（使用与工作代码相同的选择器）
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		loading, err := modal.Element(".goods-list-loading")
+		loading, err := modal.Element(selectors.GoodsLoading)
 		if err != nil || loading == nil {
 			break
 		}
@@ -1133,7 +1133,7 @@ func searchAndSelectProduct(page *rod.Page, modal *rod.Element, keyword string) 
 
 	// 等待商品列表渲染完成（使用与工作代码相同的选择器）
 	for time.Now().Before(deadline) {
-		productList, err := modal.Element(".goods-list-normal .good-card-container")
+		productList, err := modal.Element(selectors.GoodsListItem)
 		if err == nil && productList != nil {
 			break
 		}
@@ -1142,7 +1142,7 @@ func searchAndSelectProduct(page *rod.Page, modal *rod.Element, keyword string) 
 	time.Sleep(500 * time.Millisecond) // 额外等待确保渲染完成
 
 	// 5. 点击第一个商品的 checkbox（使用与工作代码相同的选择器）
-	checkbox, err := modal.Element(".goods-list-normal .good-card-container .d-checkbox")
+	checkbox, err := modal.Element(selectors.GoodsCheckbox)
 	if err != nil {
 		return errors.Wrap(err, "未找到商品选择框")
 	}
@@ -1172,7 +1172,7 @@ func searchAndSelectProduct(page *rod.Page, modal *rod.Element, keyword string) 
 // clickModalSaveButton 点击保存按钮
 func clickModalSaveButton(page *rod.Page, modal *rod.Element) error {
 	// 查找保存按钮（参考工作代码：直接查找并点击，不强制要求找到）
-	btn, err := modal.Element(".goods-selected-footer button")
+	btn, err := modal.Element(selectors.GoodsSaveButton)
 	if err == nil && btn != nil {
 		if err := btn.Click(proto.InputMouseButtonLeft, 1); err != nil {
 			slog.Warn("点击保存按钮失败", "error", err)
@@ -1183,7 +1183,7 @@ func clickModalSaveButton(page *rod.Page, modal *rod.Element) error {
 	}
 
 	// 尝试点击主按钮
-	primaryBtn, err := modal.Element(".goods-selected-footer .d-button--primary")
+	primaryBtn, err := modal.Element(selectors.GoodsSaveFallback)
 	if err == nil && primaryBtn != nil {
 		if err := primaryBtn.Click(proto.InputMouseButtonLeft, 1); err != nil {
 			slog.Warn("点击主按钮失败", "error", err)
@@ -1204,7 +1204,7 @@ func waitForModalClose(page *rod.Page) error {
 
 	for time.Now().Before(deadline) {
 		// 使用 Has 代替 Element，避免等待元素出现的阻塞
-		has, _, err := page.Has(".multi-goods-selector-modal")
+		has, _, err := page.Has(selectors.ProductModal)
 		if err != nil || !has {
 			slog.Info("弹窗已关闭")
 			return nil
