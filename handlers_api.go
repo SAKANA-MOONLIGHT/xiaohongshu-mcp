@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/xpzouying/xiaohongshu-mcp/cookies"
 	"github.com/xpzouying/xiaohongshu-mcp/xiaohongshu"
@@ -292,4 +294,20 @@ func (s *AppServer) myProfileHandler(c *gin.Context) {
 
 	c.Set("account", "ai-report")
 	respondSuccess(c, map[string]any{"data": result}, "获取我的主页成功")
+}
+
+// checkSelectorsHandler 检查发布页所有选择器是否有效（非破坏性操作，约 15-45 秒）
+func (s *AppServer) checkSelectorsHandler(c *gin.Context) {
+	// 设置 120 秒超时（导航 + 页面加载 + 28 个选择器检查）
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
+	defer cancel()
+
+	result, err := s.xiaohongshuService.CheckSelectors(ctx)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "CHECK_SELECTORS_FAILED",
+			"选择器检查失败", err.Error())
+		return
+	}
+
+	respondSuccess(c, result, "选择器检查完成")
 }

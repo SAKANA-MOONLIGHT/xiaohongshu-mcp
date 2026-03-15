@@ -109,3 +109,19 @@ type ActionResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
+
+// CheckSelectorGroup 选择器分组检查结果
+type CheckSelectorGroup struct {
+	Passed []string `json:"passed"`
+	Failed []string `json:"failed"`
+}
+
+// CheckSelectorsResponse 选择器检查响应
+type CheckSelectorsResponse struct {
+	OK            bool                `json:"ok"`
+	LoginRequired bool                `json:"login_required"`
+	Critical      *CheckSelectorGroup `json:"critical"`
+	Secondary     *CheckSelectorGroup `json:"secondary"`
+	Summary       string              `json:"summary"`
+	CheckedAt     string              `json:"checked_at"`
+}
