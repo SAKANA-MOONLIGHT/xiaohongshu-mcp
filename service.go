@@ -598,3 +598,47 @@ func (s *XiaohongshuService) GetMyProfile(ctx context.Context) (*UserProfileResp
 
 	return response, nil
 }
+
+// CheckSelectors 检查发布页选择器是否全部有效（非破坏性操作）
+func (s *XiaohongshuService) CheckSelectors(ctx context.Context) (*CheckSelectorsResponse, error) {
+	b := newBrowser()
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	result, err := xiaohongshu.CheckSelectors(ctx, page)
+	if err != nil {
+		return nil, err
+	}
+
+	// 构建响应
+	resp := &CheckSelectorsResponse{
+		OK:            result.OK,
+		LoginRequired: result.LoginRequired,
+		CheckedAt:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if result.LoginRequired {
+		resp.Summary = "未登录，无法检查选择器"
+		return resp, nil
+	}
+
+	resp.Critical = &CheckSelectorGroup{
+		Passed: result.CriticalPassed,
+		Failed: result.CriticalFailed,
+	}
+	resp.Secondary = &CheckSelectorGroup{
+		Passed: result.SecondaryPassed,
+		Failed: result.SecondaryFailed,
+	}
+
+	criticalTotal := len(result.CriticalPassed) + len(result.CriticalFailed)
+	secondaryTotal := len(result.SecondaryPassed) + len(result.SecondaryFailed)
+	resp.Summary = fmt.Sprintf("%d/%d critical selectors passed, %d/%d secondary selectors passed",
+		len(result.CriticalPassed), criticalTotal,
+		len(result.SecondaryPassed), secondaryTotal,
+	)
+
+	return resp, nil
+}

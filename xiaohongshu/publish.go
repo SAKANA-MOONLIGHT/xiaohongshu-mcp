@@ -1214,3 +1214,129 @@ func waitForModalClose(page *rod.Page) error {
 
 	return errors.New("等待弹窗关闭超时")
 }
+
+// SelectorCheckResult 选择器检查结果
+type SelectorCheckResult struct {
+	// OK 为 true 表示所有 critical 选择器均存在
+	OK            bool
+	LoginRequired bool
+	// Critical 存放关键选择器的检查结果
+	CriticalPassed []string
+	CriticalFailed []string
+	// Secondary 存放其他选择器的检查结果
+	SecondaryPassed []string
+	SecondaryFailed []string
+}
+
+// CriticalSelectors 返回关键选择器 map（任意失败 = 发布页面已根本变化）
+func CriticalSelectors() map[string]string {
+	return map[string]string{
+		"UploadContentArea":  selectors.UploadContentArea,
+		"UploadInput":        selectors.UploadInput,
+		"TitleInput":         selectors.TitleInput,
+		"ContentEditorQuill": selectors.ContentEditorQuill,
+		"PublishButton":      selectors.PublishButton,
+	}
+}
+
+// AllSelectors 返回所有 28 个选择器的 name→value map
+func AllSelectors() map[string]string {
+	return map[string]string{
+		"UploadContentArea":   selectors.UploadContentArea,
+		"PublishTab":          selectors.PublishTab,
+		"PopoverCover":        selectors.PopoverCover,
+		"UploadInput":         selectors.UploadInput,
+		"UploadInputFallback": selectors.UploadInputFallback,
+		"ImagePreview":        selectors.ImagePreview,
+		"TitleInput":          selectors.TitleInput,
+		"ContentEditorQuill":  selectors.ContentEditorQuill,
+		"ContentPlaceholder":  selectors.ContentPlaceholder,
+		"TitleMaxLength":      selectors.TitleMaxLength,
+		"ContentMaxLength":    selectors.ContentMaxLength,
+		"PublishButton":       selectors.PublishButton,
+		"TopicContainer":      selectors.TopicContainer,
+		"TopicItem":           selectors.TopicItem,
+		"VisibilityDropdown":  selectors.VisibilityDropdown,
+		"VisibilityOptions":   selectors.VisibilityOptions,
+		"ScheduleSwitch":      selectors.ScheduleSwitch,
+		"ScheduleDateInput":   selectors.ScheduleDateInput,
+		"OriginalSwitchCards": selectors.OriginalSwitchCards,
+		"OriginalSwitch":      selectors.OriginalSwitch,
+		"AddProductSpans":     selectors.AddProductSpans,
+		"ProductModal":        selectors.ProductModal,
+		"GoodsSearchInput":    selectors.GoodsSearchInput,
+		"GoodsLoading":        selectors.GoodsLoading,
+		"GoodsListItem":       selectors.GoodsListItem,
+		"GoodsCheckbox":       selectors.GoodsCheckbox,
+		"GoodsSaveButton":     selectors.GoodsSaveButton,
+		"GoodsSaveFallback":   selectors.GoodsSaveFallback,
+	}
+}
+
+// CheckSelectors 导航到发布页，检查所有选择器是否存在（不执行任何发布操作）
+func CheckSelectors(ctx context.Context, page *rod.Page) (*SelectorCheckResult, error) {
+	result := &SelectorCheckResult{}
+	pp := page.Timeout(120 * time.Second)
+
+	// 导航到发布页
+	if err := pp.Navigate(urlOfPublic); err != nil {
+		return nil, errors.Wrap(err, "导航到发布页失败")
+	}
+	if err := pp.WaitLoad(); err != nil {
+		logrus.Warnf("等待页面加载出现问题: %v，继续尝试", err)
+	}
+
+	// 先检查登录状态：发布页未登录会跳转到登录页
+	if evalResult, err := pp.Eval("window.location.href"); err == nil {
+		currentURL := evalResult.Value.String()
+		if strings.Contains(currentURL, "login") || strings.Contains(currentURL, "passport") {
+			result.LoginRequired = true
+			result.OK = false
+			return result, nil
+		}
+	}
+
+	// 等待上传区域出现（最多 15 秒），确认页面已加载
+	deadline := time.Now().Add(15 * time.Second)
+	pageLoaded := false
+	for time.Now().Before(deadline) {
+		if has, _, err := pp.Has(selectors.UploadContentArea); err == nil && has {
+			pageLoaded = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// 确定 critical selectors
+	critical := CriticalSelectors()
+	// 如果页面未加载，UploadContentArea 直接算失败
+	if !pageLoaded {
+		result.CriticalFailed = append(result.CriticalFailed, "UploadContentArea")
+		delete(critical, "UploadContentArea")
+	}
+
+	// 检查所有 critical selectors
+	for name, sel := range critical {
+		if has, _, err := pp.Has(sel); err == nil && has {
+			result.CriticalPassed = append(result.CriticalPassed, name)
+		} else {
+			result.CriticalFailed = append(result.CriticalFailed, name)
+		}
+	}
+
+	// 检查所有 secondary selectors（AllSelectors 中不在 critical 的部分）
+	allSels := AllSelectors()
+	for name, sel := range allSels {
+		if _, isCritical := critical[name]; isCritical {
+			continue // critical 已检查
+		}
+		if has, _, err := pp.Has(sel); err == nil && has {
+			result.SecondaryPassed = append(result.SecondaryPassed, name)
+		} else {
+			result.SecondaryFailed = append(result.SecondaryFailed, name)
+		}
+	}
+
+	result.OK = len(result.CriticalFailed) == 0
+	return result, nil
+}

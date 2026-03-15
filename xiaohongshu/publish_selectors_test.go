@@ -41,3 +41,42 @@ func TestSelectorsNotEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestCriticalSelectorsNotEmpty 确保所有 critical 选择器字段不为空
+func TestCriticalSelectorsNotEmpty(t *testing.T) {
+	critical := CriticalSelectors()
+	if len(critical) == 0 {
+		t.Fatal("CriticalSelectors() 返回空 map")
+	}
+	expectedKeys := []string{
+		"UploadContentArea",
+		"UploadInput",
+		"TitleInput",
+		"ContentEditorQuill",
+		"PublishButton",
+	}
+	for _, key := range expectedKeys {
+		val, ok := critical[key]
+		if !ok {
+			t.Errorf("CriticalSelectors() 缺少字段: %s", key)
+			continue
+		}
+		if val == "" {
+			t.Errorf("CriticalSelectors().%s 不能为空", key)
+		}
+	}
+}
+
+// TestAllSelectorsCount 确保 AllSelectors() 返回全部 28 个字段
+func TestAllSelectorsCount(t *testing.T) {
+	all := AllSelectors()
+	if len(all) != 28 {
+		t.Errorf("AllSelectors() 期望 28 个字段，实际 %d 个", len(all))
+	}
+	// 验证所有值非空
+	for name, val := range all {
+		if val == "" {
+			t.Errorf("AllSelectors().%s 不能为空", name)
+		}
+	}
+}
